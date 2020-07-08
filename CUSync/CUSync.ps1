@@ -201,7 +201,10 @@ Process {
     ## For debugging uncomment
     $ErrorActionPreference = 'Stop'
     $VerbosePreference = 'continue'
-    $DebugPreference = 'SilentlyContinue'    Set-StrictMode -Version Latest    #>
+    $DebugPreference = 'SilentlyContinue'
+    Set-StrictMode -Version Latest
+    #>
+    
 
     #region Dot-source functions for each external source
     . ".\Get-ExternalTree.ps1"  # source-agnostic stuff like Get-ExternalTree, Out-CUConsole, Apply-CUBatchUpdate
