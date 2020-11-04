@@ -62,14 +62,14 @@ $templateXML.MsixPackagingToolTemplate.PackageInformation.PublisherName = $Publi
 $templateXML.MsixPackagingToolTemplate.PackageInformation.PublisherDisplayName = $PublisherDisplayName
 $templateXML.MsixPackagingToolTemplate.PackageInformation.Version = $Version
 
-
+if (-not(Test-Path "C:\Swinst\MSIX\Package")) {
+    mkdir "C:\Swinst\MSIX\Package" | Out-null
+}
 
 
 $templateXML.Save("C:\Swinst\MSIX\template.xml")
 
-if (-not(Test-Path "C:\Swinst\MSIX\Package")) {
-    mkdir "C:\Swinst\MSIX\Package" | Out-null
-}
+
 
 $msixArguments = "create-package --template `"C:\Swinst\MSIX\template.xml`""
 Write-Verbose "Start-Process -FilePath $MSIXPackagingToolCLI -ArgumentList ($msixArguments) -PassThru -Wait"
