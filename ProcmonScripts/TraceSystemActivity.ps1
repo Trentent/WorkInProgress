@@ -21,7 +21,8 @@
             You should have received a copy of the GNU General Public License
             along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-        This script will capture all events on the system for the duration specified.
+        This script will create a dynamic process monitor (procmon) filter using the session
+        ID and start a capture lasting a duration you specify.
 		
 	.PARAMETER	<Duration <string[]>
 		The duration (in seconds) to run the capture. Requires Procmon 3.2+ as versions from this point have the duration switch
@@ -31,6 +32,18 @@
 
     .PARAMETER  <SaveLogTo <string[]>
 		Specifies folder the process monitor log file will be saved.
+
+    .PARAMETER  <DropFilteredEvents <string>>
+		When False DropFilteredEvents will keep all the events in the capture. If True then procmon will 'drop filtered events'. Dropping filtered events means faster procmon operation
+        but you can't recover dropped events.
+
+    .PARAMETER  <Filter <string>>
+		Specify a filter to include with the capture. Best used with "$DropFilteredEvents = $True" to capture events surgically.
+        Examples of filters:
+        -Filter "Operation,is,WriteFile,include"
+            -- Any process that does a 'WriteFile' is added to the capture
+        -Filter "Process Name,contains,procmon,exclude;Process Name,is,Procexp.exe,exclude"
+            -- applies two filters. First filter is excluding procmon from the capture, the second filter is excluding procexp from the capture.
 		
     .LINK
         For more information refer to:
@@ -46,11 +59,37 @@
     .EXAMPLE
         C:\PS> Remote-Procmon -Duration 15 -ProcMonFolder C:\sysinternals -SaveLogTo D:\procmonlogs
 		
-		Starts process monitor for 15 seconds, filtering for session 3, keeping all events except exclusions.  Procmon.exe is located in the path
+		Starts process monitor for 15 seconds.  Procmon.exe is located in the path
         C:\sysinternals\procmon.exe and the logs will be saved to the D:\procmonlogs folder.
 
         C:\PS> . .\TraceSystemActivity.ps1 15 C:\sysinternals D:\procmonlogs
+
+    .EXAMPLE
+        C:\PS> Remote-Procmon -Duration 15 -ProcMonFolder C:\sysinternals -SaveLogTo D:\procmonlogs -DropFilteredEvents:$True -Filter "Process Name,contains,procmon,exclude"
+		
+		Starts process monitor for 15 seconds, excluding all events with the process name "procmon".  Procmon.exe is located in the path
+        C:\sysinternals\procmon.exe and the logs will be saved to the D:\procmonlogs folder.
+
+        C:\PS> . .\TraceSystemActivity.ps1 15 C:\sysinternals D:\procmonlogs -DropFilteredEvents:$True -Filter "Process Name,contains,procmon,exclude"
 #>
+
+[CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$false)]
+        [int]$Duration = 10,
+
+        [Parameter(Mandatory=$true)]
+        [String]$ProcMonFolder,
+
+        [Parameter(Mandatory=$true)]
+        [String]$SaveLogTo,
+
+        [Parameter(Mandatory=$false)]
+        [String]$DropFilteredEvents="false",
+
+        [Parameter(Mandatory=$false)]
+        [String]$Filter = "Process Name,contains,procmon.exe,exclude;Process Name,contains,procexp.exe,exclude;Process Name,contains,Autoruns.exe,exclude;Process Name,contains,Procmon64.exe,exclude;Process Name,contains,Procexp64.exe,exclude;Process Name,contains,System,exclude"
+)
 
 function Remote-Procmon {
     [CmdletBinding()]
@@ -62,7 +101,13 @@ function Remote-Procmon {
         [String]$ProcMonFolder,
 
         [Parameter(Mandatory=$true)]
-        [String]$SaveLogTo
+        [String]$SaveLogTo,
+
+        [Parameter(Mandatory=$false)]
+        [boolean]$DropFilteredEvents=$false,
+
+        [Parameter(Mandatory=$false)]
+        [String]$Filter = "Process Name,contains,procmon.exe,exclude;Process Name,contains,procexp.exe,exclude;Process Name,contains,Autoruns.exe,exclude;Process Name,contains,Procmon64.exe,exclude;Process Name,contains,Procexp64.exe,exclude;Process Name,contains,System,exclude"
     )
 
     begin {
@@ -267,7 +312,10 @@ function Remote-Procmon {
 		
                 #Set filter
                 if ($env:Username -like "*$env:COMPUTERNAME*") {
-                    Write-Verbose "It seems we are running under the SYSTEM account"
+                    if (-not($RunningAsSystemAccount)) {
+                        Write-Verbose "It seems we are running under the SYSTEM account"
+                    }
+                    $RunningAsSystemAccount = $true
                     if (-not(Test-Path "HKU:\.DEFAULT\Software\Sysinternals\Process Monitor")) {
                         New-Item "HKU:\.DEFAULT\Software\Sysinternals\Process Monitor" -Force  -ErrorVariable SetRegKeyErr | Out-Null
                     }
@@ -322,30 +370,42 @@ function Remote-Procmon {
             $Duration = 60
         }
 
-        #keep all events
+        #running as a ControlUp SBA under the system account?
         if ($env:Username -like "*$env:COMPUTERNAME*") {
-            if (-not(Test-Path "HKU:\.DEFAULT\Software\Sysinternals\Process Monitor")) {
-                New-Item "HKU:\.DEFAULT\Software\Sysinternals\Process Monitor" -Force -ErrorVariable SetRegKeyErr | Out-Null
+            $RegPath = "HKU:\.DEFAULT"
+        } else {
+            $RegPath = "HKCU:"
+        }
+
+        #should we keep all events?
+        #Include profiling events only if paramater switch set
+        if($DropFilteredEvents -eq $true -and ($Filter.length) -ne 0) {
+            $Filter += ";EventClass,is,profiling,exclude"
+            #Set "Drop Filtered Events"
+            Write-Verbose "Dropping Filtered Events.`nFilter: $($Filter | Out-String))"
+            if (-not(Test-Path "$RegPath\Software\Sysinternals\Process Monitor")) {
+                New-Item "$RegPath\Software\Sysinternals\Process Monitor" -Force -ErrorVariable SetRegKeyErr | Out-Null
             }
-                New-ItemProperty "HKU:\.DEFAULT\Software\Sysinternals\Process Monitor" "DestructiveFilter" -Value ("0x0") -PropertyType Dword -Force -ErrorVariable SetRegKeyErr | out-null
-            } else {
-                if (-not(Test-Path "HKCU:\Software\Sysinternals\Process Monitor")) {
-                    New-Item "HKCU:\Software\Sysinternals\Process Monitor" -Force  -ErrorVariable SetRegKeyErr | Out-Null
-                }
-                New-ItemProperty "HKCU:\Software\Sysinternals\Process Monitor" "DestructiveFilter" -Value ("0x0") -PropertyType Dword -Force -ErrorVariable SetRegKeyErr | out-null
-            if (($setRegKeyErr | measure).count -ne 0) {
-                Write-Error "Error: Writing registry failed: $SetRegKeyErr"
+            New-ItemProperty "$RegPath\Software\Sysinternals\Process Monitor" "DestructiveFilter" -Value ("0x1","0x0","0x0","0x0") -PropertyType Binary -Force | out-null
+        }
+
+        if($DropFilteredEvents -eq $false) {
+            #Keep all events
+            Write-Verbose "Keeping all events"
+            if (-not(Test-Path "$RegPath\Software\Sysinternals\Process Monitor")) {
+                New-Item "$RegPath\Software\Sysinternals\Process Monitor" -Force  -ErrorVariable SetRegKeyErr | Out-Null
             }
+            New-ItemProperty "$RegPath\Software\Sysinternals\Process Monitor" "DestructiveFilter" -Value ("0x0") -PropertyType Dword -Force -ErrorVariable SetRegKeyErr | out-null
         }
 
         #Convert user input into proper object
-        if(($Filters.length) -ne 0) {
+        if(($Filter.length) -ne 0) {
 	        Write-Verbose "Converting user supplied filter into object format."
-	        $FilterObj = convert-FiltertoObj -Filters $Filters
+	        $FilterObj = convert-FiltertoObj -Filters $Filter
         } else {
 	        Write-Verbose "No filter specified, writing one that will never trigger."
-	        $Filters = "ProcessName,is,AAAAAAA,exclude"
-	        $FilterObj = convert-FiltertoObj -Filters $Filters
+	        $Filter = "ProcessName,is,AAAAAAA,exclude"
+	        $FilterObj = convert-FiltertoObj -Filters $Filter
         }
 
         #Attempt to write filter
@@ -399,4 +459,21 @@ function Remote-Procmon {
     }
 }
 
-Remote-Procmon -Duration $args[0] -ProcMonFolder $args[1] -SaveLogTo $args[2] -Verbose
+#convert the String parameter of "DropFilteredEvents" into a boolean
+if ($DropFilteredEvents -like "false" -or $DropFilteredEvents -eq "0") {
+    Remove-Variable DropFilteredEvents
+    $DropFilteredEvents = $false
+} else {
+    Remove-Variable DropFilteredEvents
+    $DropFilteredEvents = $true
+}
+
+[hashtable]$params = @{
+    'Duration' = $duration
+    'ProcMonFolder' =  $ProcMonFolder
+    'SaveLogTo' = $SaveLogTo
+    'DropFilteredEvents' = $DropFilteredEvents
+    'Filter' = $Filter
+}
+
+Remote-Procmon @params -Verbose
