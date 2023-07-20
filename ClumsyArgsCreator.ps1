@@ -1,10 +1,54 @@
-﻿[CmdletBinding()]
+﻿<#
+    .SYNOPSIS
+        Creates and launches the clumsy network simulator tool
+
+    .DESCRIPTION
+        Creates and launches the clumsy network simulator tool with specific traffic flows affected
+
+    .PARAMETER HopToApplyLatency
+        The hop that will have latency applied (and traffic thereafter ideally)
+        
+    .PARAMETER CitrixGateway
+        The URL to the Citrix Gateway. Example: "https://myapps.toontown.com". If you specify this value then lag will apply to the
+        citrix sessions connecting to this gateway.
+
+    .PARAMETER PathToClumsyExe
+        The path to clumsy.exe
+
+    .PARAMETER LagInMilliseconds
+        Amount of lag in milliseconds to add to the network connections. If you do not specify this parameter a random
+        value between 75 and 250 milliseconds will be added. Setting a value of zero (0) will disable the lag simulation
+
+    .PARAMETER DroppedPacketsPercentage
+        The percent of packets that will be dropped. If you do not specify this parameter no packets will be dropped.
+
+    .EXAMPLE
+        . .\ClumsyArgsCreator.ps1 -HopToApplyLatency Everything -PathToClumsyExe C:\swinst\clumsy\clumsy.exe
+        Lag between 75 and 250 milliseconds will be applied to all traffic
+
+    .EXAMPLE
+        . .\ClumsyArgsCreator.ps1 -HopToApplyLatency LocalGateway -PathToClumsyExe C:\swinst\clumsy\clumsy.exe -CitrixGateway https://myapps.toontown.com
+        Lag between 75 and 250 milliseconds will be applied to traffic past the local gateway and to Citrix sessions connecting to the
+        specified Citrix gateway
+
+    .EXAMPLE
+        . .\ClumsyArgsCreator.ps1 -HopToApplyLatency ISPGateway -PathToClumsyExe C:\swinst\clumsy\clumsy.exe -CitrixGateway https://myapps.toontown.com -LagInMilliseconds 33 -DroppedPacketsPercentage 10
+        A lag 33 milliseconds will be applied to traffic past the ISP gateway and to Citrix sessions connecting to the
+        specified Citrix gateway. In addition 10% of the packets will be dropped
+
+    .MODIFICATION_HISTORY
+        Created TTYE : 2023-07-20
+
+
+    AUTHOR: Trentent Tye
+#>
+[CmdletBinding()]
     param (
         [parameter(Mandatory=$true)] [ValidateSet ("LocalGateway","ISPGateway","GoogleDNS","TotalSessionLatency","Everything")]
         [string]$HopToApplyLatency,   
         [Parameter(Mandatory = $False)]
         [uri]$CitrixGateway,
-        [Parameter(Mandatory = $False)]
+        [Parameter(Mandatory = $true)]
         [string]$PathToClumsyExe,
         [Parameter(Mandatory = $False)]
         [int]$LagInMilliseconds = $(Get-Random -Minimum 75 -Maximum 250),
