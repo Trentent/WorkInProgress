@@ -517,6 +517,11 @@ if ($URL.Host -like "myapps.acmeorg.net") {
             Write-Host "Loop number                                   : $count" -ForegroundColor Yellow
             Write-Host "Enter User Name Element Detected              : $($EnterUserNameField.count)" -ForegroundColor Yellow
             Start-Sleep -Seconds 10
+            if ($count -eq 5) {
+                Write-Host "It's been 50 seconds since we tried loading the gateway page and no user name field has been detected..."
+                Write-Host "Attempting to reload... Hopefully it works a second time."
+                Set-SeURL -URL "$($URL.AbsoluteUri)"
+            }
         } until (($count -ge 7) -or ($EnterUserNameField.count -ge 1))
 
         if ($count -ge 7) {
@@ -587,7 +592,11 @@ if ($URL.Host -like "myapps.acmeorg.net") {
 
     Write-Host "Waiting for enumeration... (120 second timeout)"  -ForegroundColor Magenta
     $XPathString = "//img[@alt='" + $Application + "']" 
-    $WaitResult = Wait-SeElement -By XPath -Value "$XPathString" -Condition ElementExists -Timeout 120
+    $elementExistsCount = 0
+    do {
+        $WaitResult = Wait-SeElement -By XPath -Value "$XPathString" -Condition ElementExists -Timeout 120
+        $elementExistsCount = $elementExistsCount+1
+    } until (($WaitResult -eq $true) -or ($elementExistsCount -ge 5))
 
     #TTYE - Selenium seems to have issues with the reciever:// custom handler. For whatever reason when I run selenium on my Win10 box it will not autolaunch the citrix wfica32 or cdviewer.exe apps
     # to resolve this, we can delete the cookie "CtxsClientVersion" which will force a ICA file to be downloaded
@@ -639,6 +648,11 @@ if ($URL.Host -like "citrix.getcontrolup.com") {
             Write-Host "Loop number                                   : $count" -ForegroundColor Yellow
             Write-Host "Enter User Name Element Detected              : $($EnterUserNameField.count)" -ForegroundColor Yellow
             Start-Sleep -Seconds 10
+            if ($count -eq 5) {
+                Write-Host "It's been 50 seconds since we tried loading the gateway page and no user name field has been detected..."
+                Write-Host "Attempting to reload... Hopefully it works a second time."
+                Set-SeURL -URL "$($URL.AbsoluteUri)"
+            }
         } until (($count -ge 7) -or ($EnterUserNameField.count -ge 1))
 
         if ($count -ge 7) {
@@ -713,8 +727,13 @@ if ($URL.Host -like "citrix.getcontrolup.com") {
     }
 
     Write-Host "Waiting for enumeration... (120 second timeout)"  -ForegroundColor Magenta
-    $XPathString = "//img[@alt='" + $Application + "']" 
-    $WaitResult = Wait-SeElement -By XPath -Value "$XPathString" -Condition ElementExists -Timeout 120
+    $XPathString = "//img[@alt='" + $Application + "']"
+
+    $elementExistsCount = 0
+    do {
+        $WaitResult = Wait-SeElement -By XPath -Value "$XPathString" -Condition ElementExists -Timeout 120
+        $elementExistsCount = $elementExistsCount+1
+    } until (($WaitResult -eq $true) -or ($elementExistsCount -ge 5))
     #TTYE - Selenium seems to have issues with the reciever:// custom handler. For whatever reason when I run selenium on my Win10 box it will not autolaunch the citrix wfica32 or cdviewer.exe apps
     # to resolve this, we can delete the cookies "CtxsClientVersion" and ensure "CtxsUserPreferredClient" is set to Native which will force a ICA file to be downloaded
     $driver.Manage().Cookies.DeleteCookieNamed("CtxsClientVersion")
